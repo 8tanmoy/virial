@@ -1,0 +1,130 @@
+*based on rotate_2.inp used for tip3 water
+*
+
+stream /projectnb/cui-buchem/tanmoy/projects/2virial/methane/toppar_cgenff.str
+set cordir /projectnb/cui-buchem/tanmoy/projects/2virial/co2/setup
+
+read psf card name @cordir/co2_1.psf
+read psf card name @cordir/co2_2.psf append
+read coor card name @cordir/co2_1.cor
+read coor card name @cordir/co2_2.cor append 
+
+!--verify COM-COM distance--
+!quick sele segid A end MASS sele segid B end MASS
+!show ?DIST
+!print coor
+
+set grid _DIST_
+
+!--verify COM-COM distance--
+quick sele segid A end MASS sele segid B end MASS
+show ?DIST
+
+!--define selections--
+define mono1 sele segid A show end
+define mono2 sele segid B show end
+
+!--set up output file to collect energies--
+open write card unit 11 name en_@grid.dat
+
+!--DFTBx setup--
+define qm sele all show end
+scalar WMAIN set 1.0 sele (qm) .and. type O*  SHOW end
+scalar WMAIN set 2.0 sele (qm) .and. type C*  SHOW end
+SCCDFTB remove chrg 0 sele qm end temp 0.0 SCFT 0.00000001 D3RD HBON TWOBODY THREEBODY
+
+set i 0
+set imax 400000
+!set imax 3
+label looprot
+
+!----copy original coor to comp--------------
+	coor copy comp select all show end
+!------------rotate monomer 1----------------
+	calc x0 ?RAND
+	calc x1 ?RAND
+	calc x2 ?RAND
+	calc theta = (2 * ?PI * @x0)
+	calc phi = (2 * ?PI * @x1)
+	calc zee = (2.0 * @x2)
+	calc rr = SQRT( @zee)
+	calc vx = (SIN( @phi) * @rr)
+	calc vy = (COS( @phi) * @rr)
+	calc vz = SQRT(2.0 - @zee)
+	calc st = SIN( @theta)
+	calc ct = COS( @theta)
+	calc sx = ((@vx * @ct) - (@vy * @st))
+	calc sy = ((@vx * @st) + (@vy * @ct))
+
+	!--form the matrix elements--
+	calc m00 = ((@vx * @sx) - @ct)
+	calc m01 = ((@vx * @sy) - @st)
+	calc m02 = (@vx * @vz)
+	calc m10 = ((@vy * @sx) + @st)
+	calc m11 = ((@vy * @sy) - @ct)
+	calc m12 = (@vy * @vz)
+	calc m20 = (@vz * @sx)
+	calc m21 = (@vz * @sy)
+	calc m22 = (1.0 - @zee)
+
+	coor rotate matrix select mono1 end
+	@m00 @m01 @m02
+	@m10 @m11 @m12
+	@m20 @m21 @m22
+!--------------------------------------------
+
+!------------rotate monomer 2----------------
+	calc x0 ?RAND
+	calc x1 ?RAND
+	calc x2 ?RAND
+	calc theta = (2 * ?PI * @x0)
+	calc phi = (2 * ?PI * @x1)
+	calc zee = (2.0 * @x2)
+	calc rr = SQRT( @zee)
+	calc vx = (SIN( @phi) * @rr)
+	calc vy = (COS( @phi) * @rr)
+	calc vz = SQRT(2.0 - @zee)
+	calc st = SIN( @theta)
+	calc ct = COS( @theta)
+	calc sx = ((@vx * @ct) - (@vy * @st))
+	calc sy = ((@vx * @st) + (@vy * @ct))
+
+	!--form the matrix elements--
+	calc m00 = ((@vx * @sx) - @ct)
+	calc m01 = ((@vx * @sy) - @st)
+	calc m02 = (@vx * @vz)
+	calc m10 = ((@vy * @sx) + @st)
+	calc m11 = ((@vy * @sy) - @ct)
+	calc m12 = (@vy * @vz)
+	calc m20 = (@vz * @sx)
+	calc m21 = (@vz * @sy)
+	calc m22 = (1.0 - @zee)
+
+	coor rotate matrix select mono2 end
+	@m00 @m01 @m02
+	@m10 @m11 @m12
+	@m20 @m21 @m22
+!--------------------------------------------
+
+	!--translate along COM-COM--
+	coor translate XDIR 1.0 YDIR 0.0 ZDIR 0.0 distance @grid select mono2 end
+
+	!--verify COM-COM distance--
+	!quick sele segid A end MASS sele segid B end MASS
+	!show ?DIST
+
+	!write coor card name dim_@i.cor
+
+	energy
+    write title unit 11
+    *?ENER
+
+    !--swap to keep original at coor--
+    !--modified coor swaps to comp----
+    coor swap comp
+
+    !--increment--
+    increment i by 1
+    if i lt @imax goto looprot
+close unit 11
+stop
